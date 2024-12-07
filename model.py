@@ -2,6 +2,23 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.feature_extraction.text import TfidfVectorizer
+import pandas as pd
+import chardet
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import pandas as pd
+import tensorflow
+#from tensorflow.keras.models import Sequential
+#from tensorflow.keras.layers import Dense
+from sklearn.metrics import mean_squared_error
+
+
 
 # Example DataFrame
 # Replace 'your_file.csv' with the path to your CSV file
@@ -24,6 +41,8 @@ df['hashtag_binary'] = df['Hashtags? (Y/N)'].map({'Y': 1, 'N': 0})
 
 #Mentions
 df['mentions_binary'] = df['Mentions? (Y/N)'].map({'Y': 1, 'N': 0})
+df['video_binary'] = df['Video? (Y/N)'].map({'Y': 1, 'N': 0})
+
 
 # Hashtag Count
 df['Hashtags List'] = df['Hashtags List'].astype(str)
@@ -77,7 +96,7 @@ print(final_df)
 
 print(final_df.columns)
 
-final_df = final_df[['Sentiment Polarity','Date of Post', 'Video? (Y/N)', 'Dimensions', 'Likes', 
+final_df = final_df[['Sentiment Polarity', 'video_binary', 
        'hashtag_binary', 'mentions_binary',
        'hashtag_count', 'width', 'height', 'area', 'aspect_ratio', 'Hour_4',
        'Hour_5', 'Hour_6', 'Hour_7', 'Hour_8', 'Hour_9', 'Hour_10', 'Hour_11',
@@ -94,5 +113,81 @@ print(final_df)
 
 
 
+X = final_df.drop('likes', axis=1)
+Y = final_df['likes']
+
+# Split data into 60% training, 20% cross-validation, and 20% test sets
+X_train, X_temp, y_train, y_temp = train_test_split(X, Y, test_size=0.4, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+print("Training set size:", len(X_train))
+print("Cross Validation set size:", len(X_val))
+print("Test set size:", len(X_test))
+
+# Creation of competing neural network models
+first = X.shape[1]
+print("Number of variables:", first)
 
 
+def create_model(units_list, input_shape=(X_train.shape[1],), activation='relu'):
+    model = tensorflow.keras.models.Sequential()
+    model.add(tensorflow.keras.layers.Dense(units_list[0], input_shape=input_shape, activation=activation))
+    for units in units_list[1:]:
+        model.add(tensorflow.keras.layers.Dense(units, activation=activation))
+    model.add(tensorflow.keras.layers.Dense(1, activation='linear'))  # Linear activation for regression output
+    model.compile(
+        optimizer='adam',  # Optimizer
+        loss='mean_squared_error',  # Regression loss function
+        metrics=[tensorflow.keras.metrics.RootMeanSquaredError()]  # RMSE metric
+    )
+    return model
+
+# Define the structures to test
+structures = [
+    [64, 32],
+    [64, 32, 16],
+]
+
+# Store metrics
+results = []
+
+# Train and evaluate models for each structure
+for structure in structures:
+    print(f"Training model with structure: {structure}")
+    model = create_model(structure)
+    model.fit(X_train, y_train, epochs=10, batch_size=10, verbose=1)  # Reduced epochs for quicker testing
+
+    # Evaluate on validation set
+    y_val_pred = model.predict(X_val).ravel()
+    mse_val = mean_squared_error(y_val, y_val_pred)
+    rmse_val = mse_val ** 0.5
+
+    # Evaluate on training set
+    y_train_pred = model.predict(X_train).ravel()
+    mse_train = mean_squared_error(y_train, y_train_pred)
+    rmse_train = mse_train ** 0.5
+
+    # Evaluate on test set
+    y_test_pred = model.predict(X_test).ravel()
+    mse_test = mean_squared_error(y_test, y_test_pred)
+    rmse_test = mse_test ** 0.5
+
+    results.append({
+        'structure': structure,
+        'rmse_train': rmse_train,
+        'rmse_val': rmse_val,
+        'rmse_test': rmse_test,
+        'model': model
+    })
+
+# Convert results to DataFrame for easy comparison
+results_df = pd.DataFrame(results)
+print(results_df)
+
+# Select the best model based on validation RMSE
+best_model_info = results_df.loc[results_df['rmse_val'].idxmin()]
+best_model_nn = best_model_info['model']
+print(f"Best Neural Network Model: {best_model_info['structure']} layers")
+print(f"Train RMSE: {best_model_info['rmse_train']}")
+print(f"Validation RMSE: {best_model_info['rmse_val']}")
+print(f"Test RMSE: {best_model_info['rmse_test']}")
