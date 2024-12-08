@@ -14,6 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 import pandas as pd
 import tensorflow
+import ast
 #from tensorflow.keras.models import Sequential
 #from tensorflow.keras.layers import Dense
 from sklearn.metrics import mean_squared_error
@@ -22,12 +23,12 @@ from sklearn.metrics import mean_squared_error
 
 # Example DataFrame
 # Replace 'your_file.csv' with the path to your CSV file
-file_path = 'quickquack_posts_data.csv'
+file_path = 'merged.csv'
 
 # Read the CSV file into a DataFrame
 df = pd.read_csv(file_path)
 
-
+print(df['color_name'].unique())
 
 # 1. Text Vectorization for Post Caption
 #tfidf = TfidfVectorizer(max_features=10)  # Adjust features as needed
@@ -35,6 +36,45 @@ df = pd.read_csv(file_path)
 #df_tfidf = pd.DataFrame(df_tfidf, columns=tfidf.get_feature_names_out())
 
 # 2. Sentiment Polarity: Already normalized (0-1)
+
+# Define reference colors
+reference_colors = {
+    "Red": [255, 0, 0],
+    "Green": [0, 255, 0],
+    "Blue": [0, 0, 255],
+    "Yellow": [255, 255, 0],
+    "Cyan": [0, 255, 255],
+    "Magenta": [255, 0, 255],
+    "White": [255, 255, 255],
+    "Black": [0, 0, 0]
+}
+
+# Convert reference colors to numpy array
+ref_color_names = list(reference_colors.keys())
+ref_color_values = np.array(list(reference_colors.values()))
+
+# Function to find nearest reference color
+def assign_nearest_color(rgb):
+    rgb = np.array(rgb)
+    distances = np.linalg.norm(ref_color_values - rgb, axis=1)
+    nearest_color_index = np.argmin(distances)
+    return ref_color_names[nearest_color_index]
+
+# Apply the function
+df["average_color"] = df["average_color"].apply(ast.literal_eval)
+
+df["color_group"] = df["average_color"].apply(assign_nearest_color)
+
+# One-hot encode the Color_Group column
+one_hot_encoder = OneHotEncoder(sparse_output=False)
+encoded_colors = one_hot_encoder.fit_transform(df[["color_group"]])
+
+# Add encoded columns to the dataset
+color_columns = one_hot_encoder.get_feature_names_out(["color_group"])
+df_encoded = pd.DataFrame(encoded_colors, columns=color_columns)
+
+# Combine with original dataset
+df = pd.concat([df, df_encoded], axis=1)
 
 #Hashtag
 df['hashtag_binary'] = df['Hashtags? (Y/N)'].map({'Y': 1, 'N': 0})
@@ -101,10 +141,11 @@ final_df = final_df[['Sentiment Polarity', 'video_binary',
        'hashtag_count', 'width', 'height', 'area', 'aspect_ratio', 'Hour_4',
        'Hour_5', 'Hour_6', 'Hour_7', 'Hour_8', 'Hour_9', 'Hour_10', 'Hour_11',
        'Hour_12', 'Hour_13', 'Hour_14', 'Hour_15', 'Hour_16', 'Hour_17',
-       'Hour_18', 'Hour_19', 'Hour_20', 'Hour_21', 'Hour_22', 'Hour_23',
-       'month', 'day', 'year', 'likes', 'comments', 'Day of Week_Friday',
+       'Hour_18', 'Hour_19', 'Hour_20', 'Hour_21', 'month', 'day', 'likes', 'Day of Week_Friday',
        'Day of Week_Monday', 'Day of Week_Saturday', 'Day of Week_Sunday',
-       'Day of Week_Thursday', 'Day of Week_Tuesday', 'Day of Week_Wednesday']]
+       'Day of Week_Thursday', 'Day of Week_Tuesday', 'Day of Week_Wednesday','color_group_Black', 'color_group_Blue', 'color_group_Cyan',
+       'color_group_Green', 'color_group_Magenta', 'color_group_Red',
+       'color_group_White', 'color_group_Yellow']]
 
 final_df = final_df.dropna()
 
